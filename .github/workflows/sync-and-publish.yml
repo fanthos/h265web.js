@@ -89,7 +89,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Fallback: checkout upstream tag content
+      - name: Checkout upstream tag content
         run: |
           TAG="${{ matrix.tag }}"
           git remote add upstream https://github.com/numberwolf/h265web.js.git || true
@@ -106,13 +106,7 @@ jobs:
       - name: Generate package.json
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
-          METHOD="${{ steps.download.outputs.method }}"
-
-          if [ "$METHOD" = "release" ]; then
-            FILES='["dist"]'
-          else
-            FILES='["static", "dist"]'
-          fi
+          FILES='["static", "dist"]'
 
           cat > package.json <<EOF
           {
