@@ -11,8 +11,9 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    outputs:
-      new_tags: ${{ steps.new_tags.outputs.new_tags }}
+    outputs:    outputs:
+      has_new: ${{ steps.new_tag.outputs.has_new }}
+      tag:     ${{ steps.new_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,45 +40,35 @@ jobs:
           git merge upstream/master --no-edit || true
           git push origin master
 
-      - name: Find new upstream tags
-        id: new_tags
+      - name: Find latest new upstream tag
+        id: new_tag
         run: |
-          UPSTREAM_TAGS=$(git tag -l "v*" --sort=-version:refname)
-
-          NEW_TAGS=""
-          for TAG in $UPSTREAM_TAGS; do
-            # 检查是否已有 published 标记 tag
+          LATEST=""
+          for TAG in $(git tag -l "v*" --sort=-version:refname); do
             if git rev-parse "refs/tags/published-$TAG" >/dev/null 2>&1; then
               continue
             fi
-
-            if [ -z "$NEW_TAGS" ]; then
-              NEW_TAGS="$TAG"
-            else
-              NEW_TAGS="$NEW_TAGS $TAG"
-            fi
+            LATEST="$TAG"
+            break
           done
 
-          if [ -z "$NEW_TAGS" ]; then
-            echo "No new upstream tags to publish."
-            echo "new_tags=" >> "$GITHUB_OUTPUT"
+          if [ -z "$LATEST" ]; then
+            echo "Up to date."
+            echo "has_new=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Found new tags: $NEW_TAGS"
-          echo "new_tags=$NEW_TAGS" >> "$GITHUB_OUTPUT"
+          echo "Latest new tag: $LATEST"
+          echo "has_new=true"  >> "$GITHUB_OUTPUT"
+          echo "tag=$LATEST"   >> "$GITHUB_OUTPUT"
 
   publish:
     needs: sync
-    if: needs.sync.outputs.new_tags != ''
+    if: needs.sync.outputs.has_new == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
-    strategy:
-      fail-fast: false
-      matrix:
-        tag: ${{ fromJSON(format('["{0}"]', join(needs.sync.outputs.new_tags, '","'))) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,35 +80,59 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Checkout upstream tag content
+      - name: Download upstream release assets
+        id: download
         run: |
-          TAG="${{ matrix.tag }}"
+          TAG="${{ needs.sync.outputs.tag }}"
+          mkdir -p dist
+          if gh release download "$TAG" \
+            --repo numberwolf/h265web.js \
+            --dir dist --pattern "*" 2>/dev/null; then
+            echo "method=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "method=tag" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fallback: checkout upstream tag content
+        if: steps.download.outputs.method == 'tag'
+        run: |
+          TAG="${{ needs.sync.outputs.tag }}"
           git remote add upstream https://github.com/numberwolf/h265web.js.git || true
-          git fetch upstream "$TAG"
+          git fetch upstream "refs/tags/$TAG:refs/tags/$TAG"
           git checkout "$TAG" -- .
 
       - name: Extract version from tag
         id: ver
         run: |
-          TAG="${{ matrix.tag }}"
-          VERSION="${TAG#v}"
+          TAG="${{ needs.sync.outputs.tag }}"
+          V="${TAG#v}"
+          if [[ "$V" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
+            VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          else
+            BASE="${V%%[!0-9]*}"; SUFFIX="${V#$BASE}"
+            Y="${BASE:0:4}"; M="${BASE:4:2}"; D="${BASE:6:2}"
+            PRE=$(echo "$SUFFIX" | sed 's/[^A-Za-z0-9]/-/g;s/^-//;s/-$//')
+            VERSION="$Y.$M.$D"
+            [ -n "$PRE" ] && VERSION="$VERSION-$PRE"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Generate package.json
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
-          FILES='["static", "dist"]'
-
+          METHOD="${{ steps.download.outputs.method }}"
+          FILES='["dist"]'
+          [ "$METHOD" = "tag" ] && FILES='["static", "dist"]'
           cat > package.json <<EOF
           {
-            "name": "@fanthos/h265web.js",
+            "name": "h265web.js",
             "version": "${VERSION}",
             "description": "Mirror of numberwolf/h265web.js",
             "main": "static/h265web.js",
             "files": ${FILES},
-            "publishConfig": {
-              "access": "public"
-            },
+            "publishConfig": { "access": "public" },
             "license": "SEE LICENSE IN LICENSE-Free_CN.MD"
           }
           EOF
@@ -134,6 +149,6 @@ jobs:
 
       - name: Create published marker tag
         run: |
-          TAG="${{ matrix.tag }}"
+          TAG="${{ needs.sync.outputs.tag }}"
           git tag "published-$TAG"
           git push origin "published-$TAG"
