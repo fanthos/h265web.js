@@ -80,23 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Download upstream release assets
-        id: download
-        run: |
-          TAG="${{ needs.sync.outputs.tag }}"
-          mkdir -p dist
-          if gh release download "$TAG" \
-            --repo numberwolf/h265web.js \
-            --dir dist --pattern "*" 2>/dev/null; then
-            echo "method=release" >> "$GITHUB_OUTPUT"
-          else
-            echo "method=tag" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fallback: checkout upstream tag content
-        if: steps.download.outputs.method == 'tag'
+      - name: checkout upstream tag content
         run: |
           TAG="${{ needs.sync.outputs.tag }}"
           git remote add upstream https://github.com/numberwolf/h265web.js.git || true
