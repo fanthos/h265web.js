@@ -126,7 +126,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: NPM Publish
-        run: npm publish  # Or: npm stage publish
+        run: npm publish --access=public
 
       - name: Create published marker tag
         run: |
