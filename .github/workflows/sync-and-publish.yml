@@ -111,7 +111,7 @@ jobs:
           [ "$METHOD" = "tag" ] && FILES='["static", "dist"]'
           cat > package.json <<EOF
           {
-            "name": "h265web.js",
+            "name": "@fanthos/h265web.js",
             "version": "${VERSION}",
             "description": "Mirror of numberwolf/h265web.js",
             "main": "static/h265web.js",
