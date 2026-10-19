@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write  # Required for OIDC
 
 jobs:
   sync:
@@ -106,9 +107,7 @@ jobs:
       - name: Generate package.json
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
-          METHOD="${{ steps.download.outputs.method }}"
-          FILES='["dist"]'
-          [ "$METHOD" = "tag" ] && FILES='["static", "dist"]'
+          FILES='["static", "dist"]'
           cat > package.json <<EOF
           {
             "name": "@fanthos/h265web.js",
@@ -125,11 +124,6 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org/"
-
-      - name: Publish to npm
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create published marker tag
         run: |
