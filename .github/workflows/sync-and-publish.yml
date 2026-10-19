@@ -1,0 +1,145 @@
+name: Sync upstream tags and publish to npm
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tags: ${{ steps.new_tags.outputs.new_tags }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch tags
+        run: |
+          git remote add upstream https://github.com/numberwolf/h265web.js.git || true
+          git fetch upstream --tags
+
+      - name: Push all upstream tags to downstream
+        run: |
+          git push origin --tags
+
+      - name: Merge upstream master into master
+        run: |
+          git checkout master
+          git merge upstream/master --no-edit || true
+          git push origin master
+
+      - name: Find new upstream tags
+        id: new_tags
+        run: |
+          UPSTREAM_TAGS=$(git tag -l "v*" --sort=-version:refname)
+
+          NEW_TAGS=""
+          for TAG in $UPSTREAM_TAGS; do
+            # 检查是否已有 published 标记 tag
+            if git rev-parse "refs/tags/published-$TAG" >/dev/null 2>&1; then
+              continue
+            fi
+
+            if [ -z "$NEW_TAGS" ]; then
+              NEW_TAGS="$TAG"
+            else
+              NEW_TAGS="$NEW_TAGS $TAG"
+            fi
+          done
+
+          if [ -z "$NEW_TAGS" ]; then
+            echo "No new upstream tags to publish."
+            echo "new_tags=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Found new tags: $NEW_TAGS"
+          echo "new_tags=$NEW_TAGS" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: sync
+    if: needs.sync.outputs.new_tags != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJSON(format('["{0}"]', join(needs.sync.outputs.new_tags, '","'))) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fallback: checkout upstream tag content
+        run: |
+          TAG="${{ matrix.tag }}"
+          git remote add upstream https://github.com/numberwolf/h265web.js.git || true
+          git fetch upstream "$TAG"
+          git checkout "$TAG" -- .
+
+      - name: Extract version from tag
+        id: ver
+        run: |
+          TAG="${{ matrix.tag }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate package.json
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          METHOD="${{ steps.download.outputs.method }}"
+
+          if [ "$METHOD" = "release" ]; then
+            FILES='["dist"]'
+          else
+            FILES='["static", "dist"]'
+          fi
+
+          cat > package.json <<EOF
+          {
+            "name": "@fanthos/h265web.js",
+            "version": "${VERSION}",
+            "description": "Mirror of numberwolf/h265web.js",
+            "main": "static/h265web.js",
+            "files": ${FILES},
+            "publishConfig": {
+              "access": "public"
+            },
+            "license": "SEE LICENSE IN LICENSE-Free_CN.MD"
+          }
+          EOF
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create published marker tag
+        run: |
+          TAG="${{ matrix.tag }}"
+          git tag "published-$TAG"
+          git push origin "published-$TAG"
