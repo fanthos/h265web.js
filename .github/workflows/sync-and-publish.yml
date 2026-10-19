@@ -35,9 +35,9 @@ jobs:
 
       - name: Merge upstream master into master
         run: |
-          git checkout master
+          git checkout refs/heads/master
           git merge upstream/master --no-edit || true
-          git push origin master
+          git push origin refs/heads/master:refs/heads/master
 
       - name: Find new upstream tags
         id: new_tags
