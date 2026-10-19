@@ -11,7 +11,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    outputs:    outputs:
+    outputs:
       has_new: ${{ steps.new_tag.outputs.has_new }}
       tag:     ${{ steps.new_tag.outputs.tag }}
     steps:
