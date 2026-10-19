@@ -33,11 +33,11 @@ jobs:
         run: |
           git push origin --tags
 
-      - name: Merge upstream master into master
+      - name: Merge upstream master into local master
         run: |
-          git checkout refs/heads/master
+          git checkout -B master origin/master
           git merge upstream/master --no-edit || true
-          git push origin refs/heads/master:refs/heads/master
+          git push origin master
 
       - name: Find new upstream tags
         id: new_tags
