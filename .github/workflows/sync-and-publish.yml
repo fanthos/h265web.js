@@ -115,6 +115,10 @@ jobs:
             "description": "Mirror of numberwolf/h265web.js",
             "main": "static/h265web.js",
             "files": ${FILES},
+            "repository": {
+              "type": "git",
+              "url": "git+${REPO_URL}.git"
+            },
             "publishConfig": { "access": "public" },
             "license": "SEE LICENSE IN LICENSE-Free_CN.MD"
           }
