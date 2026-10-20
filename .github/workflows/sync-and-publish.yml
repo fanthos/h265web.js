@@ -116,8 +116,7 @@ jobs:
             "main": "static/h265web.js",
             "files": ${FILES},
             "repository": {
-              "type": "git",
-              "url": "git+${REPO_URL}.git"
+              "url": "${REPO_URL}"
             },
             "publishConfig": { "access": "public" },
             "license": "SEE LICENSE IN LICENSE-Free_CN.MD"
