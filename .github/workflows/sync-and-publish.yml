@@ -116,7 +116,7 @@ jobs:
             "main": "static/h265web.js",
             "files": ${FILES},
             "repository": {
-              "url": "${REPO_URL}"
+              "url": "https://github.com/fanthos/h265web.js"
             },
             "publishConfig": { "access": "public" },
             "license": "SEE LICENSE IN LICENSE-Free_CN.MD"
